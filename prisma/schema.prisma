@@ -1,0 +1,66 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String     @id @default(cuid())
+  email     String     @unique
+  name      String?
+  image     String?
+  createdAt DateTime   @default(now())
+  accounts  Account[]
+  events    CalEvent[]
+  reminders Reminder[]
+}
+
+model Account {
+  id                String   @id @default(cuid())
+  userId            String
+  provider          String // "gmail" | "outlook" | "apple"
+  providerAccountId String
+  email             String
+  accessToken       String
+  refreshToken      String?
+  expiresAt         Int?
+  color             String // user-assigned color for this account
+  label             String? // optional label like "Work" or "Personal"
+  createdAt         DateTime @default(now())
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  events            CalEvent[]
+
+  @@unique([provider, providerAccountId])
+}
+
+model CalEvent {
+  id          String   @id @default(cuid())
+  userId      String
+  accountId   String
+  sourceId    String // original ID from Google/MS/Apple
+  title       String
+  start       DateTime
+  end         DateTime
+  type        String   @default("meeting")
+  location    String?
+  description String?
+  syncedAt    DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  account     Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  reminders   Reminder[]
+
+  @@unique([accountId, sourceId])
+}
+
+model Reminder {
+  id            String   @id @default(cuid())
+  userId        String
+  eventId       String
+  minutesBefore Int      @default(15)
+  sent          Boolean  @default(false)
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  event         CalEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+}
