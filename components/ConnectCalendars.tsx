@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 type Provider = "gmail" | "outlook" | "apple";
 
@@ -52,15 +52,34 @@ const AVATAR_COLORS = ["#2563EB", "#7C3AED", "#059669", "#F59E0B", "#EC4899", "#
 
 export function ConnectCalendars({ context = "connect" }: { context?: "connect" | "settings" }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [accounts, setAccounts] = useState<ConnectedAccount[]>([]);
   const [loading, setLoading] = useState(true);
   const [pendingProvider, setPendingProvider] = useState<Provider | null>(null);
   const [emailDraft, setEmailDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   useEffect(() => {
     void loadAccounts();
   }, []);
+
+  useEffect(() => {
+    const oauthError = searchParams.get("error");
+    const connected = searchParams.get("connected");
+    if (oauthError) setError(oauthError);
+    if (connected === "gmail") setNotice("Google account connected.");
+    if (connected === "outlook") setNotice("Outlook account connected.");
+    if (oauthError || connected) {
+      router.replace(context === "settings" ? "/settings" : "/connect");
+    }
+  }, [searchParams, router, context]);
+
+  function connectOAuth(provider: "gmail" | "outlook") {
+    const returnTo = context === "settings" ? "/settings" : "/connect";
+    const path = provider === "gmail" ? "google" : "microsoft";
+    window.location.href = `/api/accounts/${path}/connect?returnTo=${returnTo}`;
+  }
 
   async function loadAccounts() {
     setLoading(true);
@@ -110,6 +129,16 @@ export function ConnectCalendars({ context = "connect" }: { context?: "connect" 
 
   return (
     <div className="flex flex-col gap-6">
+      {notice && (
+        <p className="text-sm text-emerald-600 bg-emerald-50 border border-emerald-200 rounded-input px-4 py-2">
+          {notice}
+        </p>
+      )}
+      {error && !pendingProvider && (
+        <p className="text-sm text-conflict bg-red-50 border border-red-200 rounded-input px-4 py-2">
+          {error}
+        </p>
+      )}
       {accounts.length > 0 && (
         <div className="rounded-card bg-card border border-border p-5 flex flex-col gap-4">
           <div className="flex flex-wrap items-center justify-between gap-4">
@@ -174,6 +203,10 @@ export function ConnectCalendars({ context = "connect" }: { context?: "connect" 
                 {providerAccounts.length === 0 && (
                   <button
                     onClick={() => {
+                      if (provider.id === "gmail" || provider.id === "outlook") {
+                        connectOAuth(provider.id);
+                        return;
+                      }
                       setPendingProvider(provider.id);
                       setError(null);
                     }}
@@ -208,7 +241,7 @@ export function ConnectCalendars({ context = "connect" }: { context?: "connect" 
                 </div>
               ))}
 
-              {pendingProvider === provider.id && (
+              {pendingProvider === provider.id && provider.id === "apple" && (
                 <div className="flex flex-col gap-2 rounded-input border border-dashed border-border p-4">
                   <p className="text-sm text-foreground/60">
                     Sign in with {provider.name} to authorize read-only access (this demo accepts the
@@ -246,6 +279,10 @@ export function ConnectCalendars({ context = "connect" }: { context?: "connect" 
               {providerAccounts.length > 0 && !atLimit && pendingProvider !== provider.id && (
                 <button
                   onClick={() => {
+                    if (provider.id === "gmail" || provider.id === "outlook") {
+                      connectOAuth(provider.id);
+                      return;
+                    }
                     setPendingProvider(provider.id);
                     setError(null);
                   }}

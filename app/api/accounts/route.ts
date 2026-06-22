@@ -1,15 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
-import { PROVIDER_COLORS, type Provider } from "@/lib/normalise";
-
-const PROVIDER_LIMITS: Record<Provider, number> = {
-  gmail: 5,
-  outlook: 5,
-  apple: 1,
-};
-
-const ACCOUNT_PALETTE = ["#2563EB", "#7C3AED", "#059669", "#F59E0B", "#EC4899"];
+import { ACCOUNT_PALETTE, PROVIDER_COLORS, PROVIDER_LIMITS, type Provider } from "@/lib/normalise";
 
 export async function GET() {
   const session = await auth();
@@ -45,12 +37,12 @@ export async function GET() {
 }
 
 /**
- * Finalises an OAuth connection for the signed-in user.
+ * Connects an Apple Calendar account for the signed-in user.
  *
- * In production this is invoked from the provider's OAuth callback once the
- * popup completes (carrying the real access/refresh tokens). Without live
- * Google/Microsoft/Apple app credentials this endpoint accepts the connecting
- * email directly so the multi-account UI can be exercised end-to-end.
+ * Apple has no app-registration OAuth flow available here, so this endpoint
+ * accepts the connecting email directly (demo flow). Google and Outlook go
+ * through real OAuth via /api/accounts/google/connect and
+ * /api/accounts/microsoft/connect respectively.
  */
 export async function POST(req: Request) {
   const session = await auth();
@@ -64,8 +56,18 @@ export async function POST(req: Request) {
   if (!provider || !email) {
     return NextResponse.json({ error: "provider and email are required" }, { status: 400 });
   }
-  if (provider !== "gmail" && provider !== "outlook" && provider !== "apple") {
-    return NextResponse.json({ error: "Unknown provider" }, { status: 400 });
+  if (provider !== "apple") {
+    return NextResponse.json(
+      {
+        error:
+          provider === "gmail"
+            ? "Google accounts must be connected via /api/accounts/google/connect"
+            : provider === "outlook"
+            ? "Outlook accounts must be connected via /api/accounts/microsoft/connect"
+            : "Unknown provider",
+      },
+      { status: 400 }
+    );
   }
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return NextResponse.json({ error: "Enter a valid email address" }, { status: 400 });

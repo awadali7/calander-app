@@ -1,10 +1,12 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { EventBlock } from "@/components/EventBlock";
 import type { ClientEvent } from "@/lib/calendar-types";
 
-const HOUR_START = 8;
-const HOUR_END = 18;
+const HOUR_START = 0;
+const HOUR_END = 24;
+const SCROLL_TO_HOUR = 8;
 const HOURS = Array.from({ length: HOUR_END - HOUR_START }, (_, i) => HOUR_START + i);
 
 function isSameDay(a: Date, b: Date) {
@@ -89,9 +91,14 @@ export function CalendarGrid({
     return d;
   });
   const today = new Date();
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: SCROLL_TO_HOUR * 64 });
+  }, []);
 
   return (
-    <div className="flex-1 overflow-auto">
+    <div ref={scrollRef} className="flex-1 overflow-auto">
       <div className="min-w-[640px] grid" style={{ gridTemplateColumns: "64px repeat(5, 1fr)" }}>
         <div className="sticky top-0 z-10 bg-background" />
         {days.map((day) => {
@@ -117,7 +124,12 @@ export function CalendarGrid({
 
         <div className="border-r border-border">
           {HOURS.map((hour) => (
-            <div key={hour} className="h-16 -translate-y-2 pr-2 text-right text-xs text-foreground/40">
+            <div
+              key={hour}
+              className={`h-16 pr-2 text-right text-xs text-foreground/40 ${
+                hour === HOUR_START ? "" : "-translate-y-2"
+              }`}
+            >
               {formatHour(hour)}
             </div>
           ))}
@@ -127,7 +139,7 @@ export function CalendarGrid({
           const dayEvents = events.filter((e) => isSameDay(e.start, day));
           const laidOut = layoutDay(dayEvents);
           return (
-            <div key={day.toISOString()} className="relative border-r border-border last:border-r-0">
+            <div key={day.toISOString()} className="relative overflow-hidden border-r border-border last:border-r-0">
               {HOURS.map((hour) => (
                 <div key={hour} className="h-16 border-b border-border/60" />
               ))}

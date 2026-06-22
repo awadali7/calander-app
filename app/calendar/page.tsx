@@ -9,7 +9,7 @@ export default async function CalendarPage() {
   }
 
   return (
-    <div className="flex flex-1 h-screen overflow-hidden">
+    <div className="flex flex-1 min-h-0 overflow-hidden">
       <CalendarDashboard />
     </div>
   );

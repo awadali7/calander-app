@@ -32,6 +32,7 @@ export function CalendarDashboard() {
   const [dismissedConflictKey, setDismissedConflictKey] = useState<string | null>(null);
   const [modal, setModal] = useState<{ mode: "create" | "edit"; event?: ClientEvent } | null>(null);
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
 
   useEffect(() => {
     void load();
@@ -122,6 +123,16 @@ export function CalendarDashboard() {
     await load();
   }
 
+  async function handleSync() {
+    setSyncing(true);
+    try {
+      await fetch("/api/sync", { method: "POST" });
+      await load();
+    } finally {
+      setSyncing(false);
+    }
+  }
+
   async function handleRemoveLater() {
     if (!activePair) return;
     const { a, b } = activePair.pair;
@@ -140,6 +151,10 @@ export function CalendarDashboard() {
         onSelectDate={setSelectedDate}
         upcoming={upcoming}
         onNewEvent={() => setModal({ mode: "create" })}
+        onSelectUpcoming={(event) => {
+          setSelectedDate(event.start);
+          setSelectedEvent(event);
+        }}
       />
 
       <div className="flex-1 flex flex-col min-w-0">
@@ -183,6 +198,13 @@ export function CalendarDashboard() {
                 ⚠ {conflictIds.size} conflict{conflictIds.size === 1 ? "" : "s"}
               </span>
             )}
+            <button
+              onClick={handleSync}
+              disabled={syncing}
+              className="rounded-pill border border-border text-sm font-medium px-4 py-2 hover:bg-background transition disabled:opacity-50"
+            >
+              {syncing ? "Syncing…" : "Sync"}
+            </button>
             <button
               onClick={() => setModal({ mode: "create" })}
               className="rounded-pill bg-primary text-white text-sm font-medium px-4 py-2 hover:bg-blue-700 transition"

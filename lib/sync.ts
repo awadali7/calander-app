@@ -1,7 +1,7 @@
 import cron from "node-cron";
 import { db } from "./db";
-import { fetchGoogleEvents } from "./google";
-import { fetchOutlookEvents } from "./microsoft";
+import { fetchGoogleEvents, refreshGoogleAccessToken } from "./google";
+import { fetchOutlookEvents, refreshMicrosoftAccessToken } from "./microsoft";
 import { fetchAppleEvents } from "./apple";
 import {
   normaliseGoogleEvent,
@@ -18,6 +18,53 @@ function syncWindow() {
   return { start, end };
 }
 
+const TOKEN_REFRESH_SKEW_SECONDS = 60;
+
+/** Returns a usable Google access token, refreshing and persisting it if expired. */
+async function getFreshGoogleAccessToken(account: Account): Promise<string> {
+  const expiresAt = account.expiresAt;
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  if (!expiresAt || expiresAt - TOKEN_REFRESH_SKEW_SECONDS > nowSeconds) {
+    return account.accessToken;
+  }
+  if (!account.refreshToken) {
+    return account.accessToken;
+  }
+
+  const refreshed = await refreshGoogleAccessToken(account.refreshToken);
+  await db.account.update({
+    where: { id: account.id },
+    data: {
+      accessToken: refreshed.access_token,
+      expiresAt: nowSeconds + refreshed.expires_in,
+    },
+  });
+  return refreshed.access_token;
+}
+
+/** Returns a usable Microsoft access token, refreshing and persisting it if expired. */
+async function getFreshMicrosoftAccessToken(account: Account): Promise<string> {
+  const expiresAt = account.expiresAt;
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  if (!expiresAt || expiresAt - TOKEN_REFRESH_SKEW_SECONDS > nowSeconds) {
+    return account.accessToken;
+  }
+  if (!account.refreshToken) {
+    return account.accessToken;
+  }
+
+  const refreshed = await refreshMicrosoftAccessToken(account.refreshToken);
+  await db.account.update({
+    where: { id: account.id },
+    data: {
+      accessToken: refreshed.access_token,
+      refreshToken: refreshed.refresh_token ?? account.refreshToken,
+      expiresAt: nowSeconds + refreshed.expires_in,
+    },
+  });
+  return refreshed.access_token;
+}
+
 /** Pulls events for one account from its provider and upserts them into the DB. */
 export async function syncAccount(account: Account): Promise<number> {
   const { start, end } = syncWindow();
@@ -30,10 +77,10 @@ export async function syncAccount(account: Account): Promise<number> {
 
   const normalised =
     account.provider === "gmail"
-      ? (await fetchGoogleEvents(account.accessToken, { timeMin: start, timeMax: end }))
+      ? (await fetchGoogleEvents(await getFreshGoogleAccessToken(account), { timeMin: start, timeMax: end }))
           .map((raw) => normaliseGoogleEvent(raw, ref))
       : account.provider === "outlook"
-      ? (await fetchOutlookEvents(account.accessToken, { start, end }))
+      ? (await fetchOutlookEvents(await getFreshMicrosoftAccessToken(account), { start, end }))
           .map((raw) => normaliseOutlookEvent(raw, ref))
       : (
           await fetchAppleEvents(account.accessToken, account.email, account.refreshToken ?? "", {

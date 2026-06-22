@@ -14,6 +14,7 @@ export function Sidebar({
   onSelectDate,
   upcoming,
   onNewEvent,
+  onSelectUpcoming,
 }: {
   accounts: ClientAccount[];
   enabledAccountIds: Set<string>;
@@ -22,6 +23,7 @@ export function Sidebar({
   onSelectDate: (date: Date) => void;
   upcoming: ClientEvent[];
   onNewEvent: () => void;
+  onSelectUpcoming: (event: ClientEvent) => void;
 }) {
   return (
     <aside className="w-[220px] shrink-0 border-r border-border bg-card flex flex-col gap-5 p-4 overflow-y-auto max-md:hidden">
@@ -58,7 +60,11 @@ export function Sidebar({
         <p className="text-xs font-semibold uppercase tracking-wide text-foreground/40 px-1">Upcoming reminders</p>
         {upcoming.length === 0 && <p className="text-xs text-foreground/40 px-1">Nothing coming up.</p>}
         {upcoming.map((event) => (
-          <div key={event.id} className="flex items-center gap-2 px-1 py-1 text-sm">
+          <button
+            key={event.id}
+            onClick={() => onSelectUpcoming(event)}
+            className="flex items-center gap-2 px-1 py-1 text-sm text-left rounded-input hover:bg-background transition"
+          >
             <span className="w-2 h-2 rounded-full shrink-0" style={{ background: event.color }} />
             <div className="min-w-0">
               <p className="truncate leading-tight">{event.title}</p>
@@ -70,7 +76,7 @@ export function Sidebar({
                 })}
               </p>
             </div>
-          </div>
+          </button>
         ))}
       </div>
 

@@ -22,6 +22,16 @@ export const PROVIDER_COLORS: Record<Provider, string> = {
   apple: "#059669",
 };
 
+/** Max number of accounts a user may connect per provider. */
+export const PROVIDER_LIMITS: Record<Provider, number> = {
+  gmail: 5,
+  outlook: 5,
+  apple: 1,
+};
+
+/** Colors assigned to successive connected accounts of a user. */
+export const ACCOUNT_PALETTE = ["#2563EB", "#7C3AED", "#059669", "#F59E0B", "#EC4899"];
+
 /** Raw event shape returned by the Google Calendar API. */
 export type GoogleRawEvent = {
   id: string;

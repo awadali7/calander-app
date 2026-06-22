@@ -2,8 +2,8 @@
 
 import type { ClientEvent } from "@/lib/calendar-types";
 
-const HOUR_START = 8;
-const HOUR_END = 18;
+const HOUR_START = 0;
+const HOUR_END = 24;
 const TOTAL_HOURS = HOUR_END - HOUR_START;
 
 function hourFraction(date: Date): number {
