@@ -1,26 +1,21 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { addDays, addMonths, addWeeks, startOfWeek } from "date-fns";
 import { Sidebar } from "@/components/Sidebar";
 import { CalendarGrid } from "@/components/CalendarGrid";
+import { MonthGrid } from "@/components/MonthGrid";
+import { SearchBox } from "@/components/SearchBox";
 import { ConflictBanner } from "@/components/ConflictBanner";
 import { EventDetail } from "@/components/EventDetail";
 import { AddEventModal } from "@/components/AddEventModal";
 import { detectConflictPairs, detectConflicts } from "@/lib/conflicts";
 import { parseEvents, type ClientAccount, type ClientEvent } from "@/lib/calendar-types";
 
-function startOfWeek(date: Date): Date {
-  const day = (date.getDay() + 6) % 7;
-  const monday = new Date(date);
-  monday.setDate(date.getDate() - day);
-  monday.setHours(0, 0, 0, 0);
-  return monday;
-}
+type View = "day" | "week" | "month";
 
-function addDays(date: Date, days: number): Date {
-  const d = new Date(date);
-  d.setDate(d.getDate() + days);
-  return d;
+function weekStart(date: Date): Date {
+  return startOfWeek(date, { weekStartsOn: 1 });
 }
 
 export function CalendarDashboard() {
@@ -28,6 +23,7 @@ export function CalendarDashboard() {
   const [events, setEvents] = useState<ClientEvent[]>([]);
   const [enabledAccountIds, setEnabledAccountIds] = useState<Set<string>>(new Set());
   const [selectedDate, setSelectedDate] = useState(() => new Date());
+  const [view, setView] = useState<View>("week");
   const [selectedEvent, setSelectedEvent] = useState<ClientEvent | null>(null);
   const [dismissedConflictKey, setDismissedConflictKey] = useState<string | null>(null);
   const [modal, setModal] = useState<{ mode: "create" | "edit"; event?: ClientEvent } | null>(null);
@@ -78,8 +74,17 @@ export function CalendarDashboard() {
       .slice(0, 4);
   }, [visibleEvents]);
 
-  const monday = startOfWeek(selectedDate);
-  const friday = addDays(monday, 4);
+  const gridStartDate = view === "day" ? selectedDate : weekStart(selectedDate);
+  const gridDayCount = view === "day" ? 1 : 7;
+  const weekEnd = addDays(weekStart(selectedDate), 6);
+
+  function stepDate(direction: 1 | -1) {
+    setSelectedDate((current) => {
+      if (view === "day") return addDays(current, direction);
+      if (view === "month") return addMonths(current, direction);
+      return addWeeks(current, direction);
+    });
+  }
 
   function toggleAccount(id: string) {
     setEnabledAccountIds((prev) => {
@@ -115,6 +120,16 @@ export function CalendarDashboard() {
       if (!res.ok) throw new Error("create failed");
     }
     await load();
+  }
+
+  async function handleRescheduleEvent(id: string, start: Date, end: Date) {
+    setEvents((prev) => prev.map((e) => (e.id === id ? { ...e, start, end } : e)));
+    const res = await fetch(`/api/events/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ start: start.toISOString(), end: end.toISOString() }),
+    });
+    if (!res.ok) await load();
   }
 
   async function handleRemoveEvent(id: string) {
@@ -162,16 +177,21 @@ export function CalendarDashboard() {
           <div className="flex items-center gap-4">
             <div>
               <h1 className="text-lg font-semibold leading-tight">
-                {selectedDate.toLocaleDateString(undefined, { month: "long", year: "numeric" })}
+                {view === "month"
+                  ? selectedDate.toLocaleDateString(undefined, { month: "long", year: "numeric" })
+                  : view === "day"
+                  ? selectedDate.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })
+                  : selectedDate.toLocaleDateString(undefined, { month: "long", year: "numeric" })}
               </h1>
               <p className="text-xs text-foreground/40">
-                Week of {monday.toLocaleDateString(undefined, { month: "short", day: "numeric" })} – {friday.toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                {view === "week" &&
+                  `Week of ${weekStart(selectedDate).toLocaleDateString(undefined, { month: "short", day: "numeric" })} – ${weekEnd.toLocaleDateString(undefined, { month: "short", day: "numeric" })}`}
               </p>
             </div>
             <div className="flex items-center gap-1">
               <button
-                onClick={() => setSelectedDate(addDays(selectedDate, -7))}
-                aria-label="Previous week"
+                onClick={() => stepDate(-1)}
+                aria-label="Previous"
                 className="w-8 h-8 flex items-center justify-center rounded-full border border-border hover:bg-background transition"
               >
                 ‹
@@ -183,16 +203,37 @@ export function CalendarDashboard() {
                 Today
               </button>
               <button
-                onClick={() => setSelectedDate(addDays(selectedDate, 7))}
-                aria-label="Next week"
+                onClick={() => stepDate(1)}
+                aria-label="Next"
                 className="w-8 h-8 flex items-center justify-center rounded-full border border-border hover:bg-background transition"
               >
                 ›
               </button>
             </div>
+            <div className="flex items-center rounded-pill border border-border p-0.5 text-sm">
+              {(["day", "week", "month"] as const).map((v) => (
+                <button
+                  key={v}
+                  onClick={() => setView(v)}
+                  className={`rounded-pill px-3 py-1 font-medium capitalize transition ${
+                    view === v ? "bg-primary text-white" : "hover:bg-background"
+                  }`}
+                >
+                  {v}
+                </button>
+              ))}
+            </div>
           </div>
 
           <div className="flex items-center gap-3">
+            <SearchBox
+              events={visibleEvents}
+              onSelect={(event) => {
+                setSelectedDate(event.start);
+                setSelectedEvent(event);
+                if (view === "month") setView("day");
+              }}
+            />
             {conflictIds.size > 0 && (
               <span className="rounded-pill bg-red-50 text-conflict text-xs font-semibold px-3 py-1.5">
                 ⚠ {conflictIds.size} conflict{conflictIds.size === 1 ? "" : "s"}
@@ -231,13 +272,28 @@ export function CalendarDashboard() {
           </div>
         ) : (
           <div className="flex flex-1 min-h-0">
-            <CalendarGrid
-              selectedDate={selectedDate}
-              events={visibleEvents}
-              conflictIds={conflictIds}
-              selectedEventId={selectedEvent?.id ?? null}
-              onSelectEvent={setSelectedEvent}
-            />
+            {view === "month" ? (
+              <MonthGrid
+                monthDate={selectedDate}
+                events={visibleEvents}
+                conflictIds={conflictIds}
+                onSelectDay={(date) => {
+                  setSelectedDate(date);
+                  setView("day");
+                }}
+                onSelectEvent={setSelectedEvent}
+              />
+            ) : (
+              <CalendarGrid
+                startDate={gridStartDate}
+                dayCount={gridDayCount}
+                events={visibleEvents}
+                conflictIds={conflictIds}
+                selectedEventId={selectedEvent?.id ?? null}
+                onSelectEvent={setSelectedEvent}
+                onRescheduleEvent={handleRescheduleEvent}
+              />
+            )}
             {selectedEvent && (
               <EventDetail
                 event={selectedEvent}

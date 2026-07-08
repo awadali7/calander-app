@@ -13,12 +13,10 @@ function isSameDay(a: Date, b: Date) {
   return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
 }
 
-function startOfWeek(date: Date): Date {
-  const day = (date.getDay() + 6) % 7; // Monday = 0
-  const monday = new Date(date);
-  monday.setDate(date.getDate() - day);
-  monday.setHours(0, 0, 0, 0);
-  return monday;
+function addDays(date: Date, days: number): Date {
+  const d = new Date(date);
+  d.setDate(d.getDate() + days);
+  return d;
 }
 
 function formatHour(hour: number): string {
@@ -72,26 +70,26 @@ function layoutDay(dayEvents: ClientEvent[]): LaidOutEvent[] {
 }
 
 export function CalendarGrid({
-  selectedDate,
+  startDate,
+  dayCount,
   events,
   conflictIds,
   selectedEventId,
   onSelectEvent,
+  onRescheduleEvent,
 }: {
-  selectedDate: Date;
+  startDate: Date;
+  dayCount: number;
   events: ClientEvent[];
   conflictIds: Set<string>;
   selectedEventId: string | null;
   onSelectEvent: (event: ClientEvent) => void;
+  onRescheduleEvent: (id: string, start: Date, end: Date) => void;
 }) {
-  const monday = startOfWeek(selectedDate);
-  const days = Array.from({ length: 5 }, (_, i) => {
-    const d = new Date(monday);
-    d.setDate(monday.getDate() + i);
-    return d;
-  });
+  const days = Array.from({ length: dayCount }, (_, i) => addDays(startDate, i));
   const today = new Date();
   const scrollRef = useRef<HTMLDivElement>(null);
+  const minWidthPx = dayCount === 1 ? 480 : Math.max(640, 64 + dayCount * 90);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: SCROLL_TO_HOUR * 64 });
@@ -99,7 +97,10 @@ export function CalendarGrid({
 
   return (
     <div ref={scrollRef} className="flex-1 overflow-auto">
-      <div className="min-w-[640px] grid" style={{ gridTemplateColumns: "64px repeat(5, 1fr)" }}>
+      <div
+        className="grid"
+        style={{ minWidth: `${minWidthPx}px`, gridTemplateColumns: `64px repeat(${dayCount}, 1fr)` }}
+      >
         <div className="sticky top-0 z-10 bg-background" />
         {days.map((day) => {
           const isToday = isSameDay(day, today);
@@ -153,6 +154,7 @@ export function CalendarGrid({
                     column={column}
                     columns={columns}
                     onClick={() => onSelectEvent(event)}
+                    onReschedule={(start, end) => onRescheduleEvent(event.id, start, end)}
                   />
                 ))}
               </div>
