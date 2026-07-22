@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import crypto from "crypto";
 import { auth } from "@/auth";
 import { getMicrosoftAuthUrl } from "@/lib/microsoft";
+import { getRequestOrigin } from "@/lib/request-origin";
 
 const STATE_COOKIE = "microsoft_oauth_state";
 
@@ -9,19 +10,20 @@ const STATE_COOKIE = "microsoft_oauth_state";
 export async function GET(req: Request) {
   const session = await auth();
   const url = new URL(req.url);
+  const origin = getRequestOrigin(req);
 
   if (!session?.user?.id) {
-    return NextResponse.redirect(new URL("/", url.origin));
+    return NextResponse.redirect(new URL("/", origin));
   }
 
   const returnTo = url.searchParams.get("returnTo") === "/settings" ? "/settings" : "/connect";
   const state = crypto.randomBytes(16).toString("hex");
-  const redirectUri = `${url.origin}/api/accounts/microsoft/callback`;
+  const redirectUri = `${origin}/api/accounts/microsoft/callback`;
 
   const response = NextResponse.redirect(getMicrosoftAuthUrl(redirectUri, state));
   response.cookies.set(STATE_COOKIE, JSON.stringify({ state, returnTo }), {
     httpOnly: true,
-    secure: url.protocol === "https:",
+    secure: origin.startsWith("https:"),
     sameSite: "lax",
     maxAge: 600,
     path: "/",

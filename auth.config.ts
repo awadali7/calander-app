@@ -4,6 +4,9 @@ import MicrosoftEntraID from "next-auth/providers/microsoft-entra-id";
 import Apple from "next-auth/providers/apple";
 
 export const authConfig: NextAuthConfig = {
+  // Cloudflare/EC2 forward requests over plain HTTP internally, so NextAuth
+  // must trust X-Forwarded-Proto/Host to build correct https callback URLs.
+  trustHost: true,
   providers: [
     Google({
       clientId: process.env.GOOGLE_CLIENT_ID ?? "",

@@ -3,6 +3,7 @@ import { auth } from "@/auth";
 import { db } from "@/lib/db";
 import { exchangeMicrosoftCode, fetchMicrosoftUserInfo } from "@/lib/microsoft";
 import { ACCOUNT_PALETTE, PROVIDER_COLORS, PROVIDER_LIMITS } from "@/lib/normalise";
+import { getRequestOrigin } from "@/lib/request-origin";
 
 const STATE_COOKIE = "microsoft_oauth_state";
 
@@ -10,6 +11,7 @@ const STATE_COOKIE = "microsoft_oauth_state";
 export async function GET(req: NextRequest) {
   const session = await auth();
   const url = new URL(req.url);
+  const origin = getRequestOrigin(req);
 
   const stateCookie = req.cookies.get(STATE_COOKIE)?.value;
   let returnTo = "/connect";
@@ -24,14 +26,14 @@ export async function GET(req: NextRequest) {
 
   function fail(message: string) {
     const response = NextResponse.redirect(
-      new URL(`${returnTo}?error=${encodeURIComponent(message)}`, url.origin)
+      new URL(`${returnTo}?error=${encodeURIComponent(message)}`, origin)
     );
     response.cookies.delete(STATE_COOKIE);
     return response;
   }
 
   if (!session?.user?.id) {
-    return NextResponse.redirect(new URL("/", url.origin));
+    return NextResponse.redirect(new URL("/", origin));
   }
 
   const error = url.searchParams.get("error");
@@ -56,7 +58,7 @@ export async function GET(req: NextRequest) {
     return fail("Invalid response from Microsoft. Please try again.");
   }
 
-  const redirectUri = `${url.origin}/api/accounts/microsoft/callback`;
+  const redirectUri = `${origin}/api/accounts/microsoft/callback`;
 
   let email: string;
   let providerAccountId: string;
@@ -115,7 +117,7 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  const response = NextResponse.redirect(new URL(`${returnTo}?connected=outlook`, url.origin));
+  const response = NextResponse.redirect(new URL(`${returnTo}?connected=outlook`, origin));
   response.cookies.delete(STATE_COOKIE);
   return response;
 }
