@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
 import { exchangeGoogleCode, fetchGoogleUserInfo } from "@/lib/google";
@@ -103,18 +104,25 @@ export async function GET(req: NextRequest) {
       return fail(`You can connect up to ${PROVIDER_LIMITS.gmail} Google account(s).`);
     }
 
-    await db.account.create({
-      data: {
-        userId: session.user.id,
-        provider: "gmail",
-        providerAccountId,
-        email,
-        accessToken,
-        refreshToken: refreshToken ?? null,
-        expiresAt: expiresAt ?? null,
-        color: ACCOUNT_PALETTE[existing.length % ACCOUNT_PALETTE.length] ?? PROVIDER_COLORS.gmail,
-      },
-    });
+    try {
+      await db.account.create({
+        data: {
+          userId: session.user.id,
+          provider: "gmail",
+          providerAccountId,
+          email,
+          accessToken,
+          refreshToken: refreshToken ?? null,
+          expiresAt: expiresAt ?? null,
+          color: ACCOUNT_PALETTE[existing.length % ACCOUNT_PALETTE.length] ?? PROVIDER_COLORS.gmail,
+        },
+      });
+    } catch (err) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+        return fail("That Google account is already connected to another UniCal user.");
+      }
+      throw err;
+    }
   }
 
   const response = NextResponse.redirect(new URL(`${returnTo}?connected=gmail`, origin));

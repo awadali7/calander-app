@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
 import { exchangeMicrosoftCode, fetchMicrosoftUserInfo } from "@/lib/microsoft";
@@ -103,18 +104,25 @@ export async function GET(req: NextRequest) {
       return fail(`You can connect up to ${PROVIDER_LIMITS.outlook} Outlook account(s).`);
     }
 
-    await db.account.create({
-      data: {
-        userId: session.user.id,
-        provider: "outlook",
-        providerAccountId,
-        email,
-        accessToken,
-        refreshToken: refreshToken ?? null,
-        expiresAt: expiresAt ?? null,
-        color: ACCOUNT_PALETTE[existing.length % ACCOUNT_PALETTE.length] ?? PROVIDER_COLORS.outlook,
-      },
-    });
+    try {
+      await db.account.create({
+        data: {
+          userId: session.user.id,
+          provider: "outlook",
+          providerAccountId,
+          email,
+          accessToken,
+          refreshToken: refreshToken ?? null,
+          expiresAt: expiresAt ?? null,
+          color: ACCOUNT_PALETTE[existing.length % ACCOUNT_PALETTE.length] ?? PROVIDER_COLORS.outlook,
+        },
+      });
+    } catch (err) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+        return fail("That Outlook account is already connected to another UniCal user.");
+      }
+      throw err;
+    }
   }
 
   const response = NextResponse.redirect(new URL(`${returnTo}?connected=outlook`, origin));

@@ -1,4 +1,5 @@
 import NextAuth from "next-auth";
+import { Prisma } from "@prisma/client";
 import { authConfig } from "./auth.config";
 import { db } from "@/lib/db";
 import { ACCOUNT_PALETTE, PROVIDER_COLORS, type Provider } from "@/lib/normalise";
@@ -24,33 +25,44 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 
       const provider = account?.provider ? AUTO_LINK_PROVIDERS[account.provider] : undefined;
       if (provider && account?.access_token) {
-        const existing = await db.account.findMany({ where: { userId: dbUser.id } });
-        const already = existing.find(
-          (a) => a.provider === provider && a.providerAccountId === account.providerAccountId
-        );
+        // Look up by the actual DB uniqueness constraint (provider +
+        // providerAccountId is global, not scoped to this user) so a stale
+        // per-user query can't miss an existing row and crash on create().
+        const existing = await db.account.findUnique({
+          where: { provider_providerAccountId: { provider, providerAccountId: account.providerAccountId } },
+        });
 
-        if (already) {
+        if (existing && existing.userId !== dbUser.id) {
+          // Already linked to a different UniCal user — leave it alone.
+        } else if (existing) {
           await db.account.update({
-            where: { id: already.id },
+            where: { id: existing.id },
             data: {
               accessToken: account.access_token,
-              refreshToken: account.refresh_token ?? already.refreshToken,
-              expiresAt: account.expires_at ?? already.expiresAt,
+              refreshToken: account.refresh_token ?? existing.refreshToken,
+              expiresAt: account.expires_at ?? existing.expiresAt,
             },
           });
         } else {
-          await db.account.create({
-            data: {
-              userId: dbUser.id,
-              provider,
-              providerAccountId: account.providerAccountId,
-              email: user.email,
-              accessToken: account.access_token,
-              refreshToken: account.refresh_token ?? null,
-              expiresAt: account.expires_at ?? null,
-              color: ACCOUNT_PALETTE[existing.length % ACCOUNT_PALETTE.length] ?? PROVIDER_COLORS[provider],
-            },
-          });
+          const accountCount = await db.account.count({ where: { userId: dbUser.id } });
+          try {
+            await db.account.create({
+              data: {
+                userId: dbUser.id,
+                provider,
+                providerAccountId: account.providerAccountId,
+                email: user.email,
+                accessToken: account.access_token,
+                refreshToken: account.refresh_token ?? null,
+                expiresAt: account.expires_at ?? null,
+                color: ACCOUNT_PALETTE[accountCount % ACCOUNT_PALETTE.length] ?? PROVIDER_COLORS[provider],
+              },
+            });
+          } catch (err) {
+            // Another concurrent sign-in created this exact row first — the
+            // account ends up linked either way, so this is safe to ignore.
+            if (!(err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002")) throw err;
+          }
         }
       }
 
